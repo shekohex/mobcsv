@@ -5,3 +5,12 @@ authors = ["Shady Khalifa <shekohex@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+structopt = "0.2.15"
+exitfailure = "0.5.1"
+log = "0.4.6"
+failure = { version = "0.1.5", features = ["derive"] }
+serde = { version = "1.0.89", features = ["derive"] }
+clap-verbosity-flag = "0.2.0"
+csv = "1.0.5"
+lazy_static = "1.3.0"
+regex = "1.1.5"
