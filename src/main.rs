@@ -2,9 +2,11 @@ use std::{
   fs::File,
   io::{BufReader, BufWriter},
   path::PathBuf,
+  time::Instant,
 };
 
 use clap_verbosity_flag::Verbosity;
+use indicatif::{HumanBytes, HumanDuration, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
 use log::{debug, info};
 use regex::Regex;
@@ -55,20 +57,42 @@ fn main() -> CliResult {
   info!("I/O Buffer Size: {} byte", BUFFER_SIZE);
   info!("Reading from {:?}", args.input_path);
   let c = File::open(args.input_path)?;
+  let metadata = c.metadata()?;
+  let pb = ProgressBar::new(metadata.len());
+  pb.set_prefix("Working");
+  pb.set_style(
+    ProgressStyle::default_bar()
+      .template(
+        "{prefix:.bold.dim} {spinner:.green} [{eta_precise}] [{bar:40.cyan/blue}] \
+        {percent}% \
+         ({eta})",
+      )
+      .tick_chars("∙∙∙●∙∙∙●∙∙∙●")
+      .progress_chars("=> "),
+  );
   let buffer = BufReader::with_capacity(BUFFER_SIZE, c);
-  let mut rdr = csv::Reader::from_reader(buffer);
+  let mut rdr = csv::Reader::from_reader(pb.wrap_read(buffer));
+  pb.println(format!(
+    "The input CSV File is {} large",
+    HumanBytes(metadata.len())
+  ));
   info!("Trying to write to {:?}", args.output_path);
   let out = File::create(args.output_path)?;
   let buffer = BufWriter::with_capacity(BUFFER_SIZE, out);
   let mut wrt = csv::Writer::from_writer(buffer);
+  let started = Instant::now();
   for r in rdr.deserialize() {
-    let record = r?;
-    if let Some(d) = is_good_ph(record) {
-      wrt.serialize(d)?;
+    if let Some(record) = is_good_ph(r?) {
+      wrt.serialize(record)?;
     }
   }
   wrt.flush()?;
-  info!("Done !");
+  pb.finish_and_clear();
+  println!(
+    "Done in {} [{}ms]",
+    HumanDuration(started.elapsed()),
+    started.elapsed().as_millis()
+  );
   Ok(())
 }
 
@@ -92,14 +116,6 @@ fn standardize_ph(mut record: Record) -> Record {
       record.ph = "966".to_owned() + &record.ph;
       record
     },
-    //    Some('0') => {
-    //      // yup it is Egypt, add just 2
-    //      if record.ph.starts_with("01") {
-    //        record.ph = "2".to_owned() + &record.ph;
-    //      }
-    //      record
-    //    },
-    // if none of the above matched then just return it
     _ => record,
   }
 }
